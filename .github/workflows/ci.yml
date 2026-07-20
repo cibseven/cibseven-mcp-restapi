@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# No deploy/publish here — this workflow only builds, runs tests, and reports coverage.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Explicit cache instead of setup-java's `cache: maven`: the built-in
+      # maven cache aborts its save step with "Path Validation Error ... do(es)
+      # not exist" even though ~/.m2/repository is populated. This step points
+      # at a path that always exists after the build and runs on Node 24.
+      - name: Cache Maven repository
+        uses: actions/cache@v6
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+
+      - name: Build and test
+        # -U forces a re-check of remote SNAPSHOTs so a stale cached dependency
+        # jar is not reused. `verify` also runs the JaCoCo report execution.
+        run: mvn -B -U verify
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          CSV="target/site/jacoco/jacoco.csv"
+          if [ ! -f "$CSV" ]; then
+            echo "No JaCoCo report found at $CSV." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          awk -F, '
+            NR > 1 { im+=$4; ic+=$5; bm+=$6; bc+=$7; lm+=$8; lc+=$9 }
+            END {
+              itot=im+ic; btot=bm+bc; ltot=lm+lc;
+              ip = itot ? 100*ic/itot : 0;
+              bp = btot ? 100*bc/btot : 0;
+              lp = ltot ? 100*lc/ltot : 0;
+              printf "## Test coverage (JaCoCo)\n\n";
+              printf "| Metric | Covered | Total | Coverage |\n";
+              printf "|---|---:|---:|---:|\n";
+              printf "| Instructions | %d | %d | %.1f%% |\n", ic, itot, ip;
+              printf "| Branches | %d | %d | %.1f%% |\n", bc, btot, bp;
+              printf "| Lines | %d | %d | %.1f%% |\n", lc, ltot, lp;
+            }
+          ' "$CSV" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/
+          if-no-files-found: warn
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+          if-no-files-found: warn
