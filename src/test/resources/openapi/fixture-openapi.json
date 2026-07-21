@@ -84,6 +84,49 @@
         "responses": { "200": { "description": "OK" } }
       }
     },
+    "/task/patch": {
+      "post": {
+        "operationId": "patchTask",
+        "summary": "Patch a task",
+        "description": "Body composed with allOf; both subschemas must merge into one flat body.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  { "type": "object", "properties": { "a": { "type": "string" } } },
+                  { "type": "object", "properties": { "b": { "type": "integer" } }, "required": ["b"] }
+                ]
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/task/search": {
+      "post": {
+        "operationId": "searchTasks",
+        "summary": "Search tasks",
+        "description": "Body with $refs nested inside additionalProperties, anyOf and items.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "byPriority": { "additionalProperties": { "$ref": "#/components/schemas/Priority" } },
+                  "anyPriority": { "anyOf": [ { "$ref": "#/components/schemas/Priority" } ] },
+                  "priorities": { "type": "array", "items": { "$ref": "#/components/schemas/Priority" } }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
     "/misc/anonymous": {
       "get": {
         "summary": "Operation without operationId — must not become a tool",
