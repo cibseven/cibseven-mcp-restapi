@@ -42,11 +42,12 @@ class OpenAPIParserTest {
 
     @Test
     void parsesAllOperationsIncludingOnesWithoutOperationId() {
-        // 5 operations in the fixture; the operationId-less one is still parsed as a route
+        // 7 operations in the fixture; the operationId-less one is still parsed as a route
         // (it is skipped later, at tool-building time)
-        assertThat(routes).hasSize(5);
+        assertThat(routes).hasSize(7);
         assertThat(routes).extracting(HTTPRoute::getOperationId)
-                .containsExactlyInAnyOrder("getTask", "createTask", "updateTask", "createDeployment", null);
+                .containsExactlyInAnyOrder("getTask", "createTask", "updateTask", "createDeployment",
+                        "patchTask", "searchTasks", null);
     }
 
     @Test
@@ -134,5 +135,38 @@ class OpenAPIParserTest {
         HTTPRoute createDeployment = FixtureSupport.route(routes, "createDeployment");
         assertThat(createDeployment.getRequestBody().getContentSchema())
                 .containsKey("multipart/form-data");
+    }
+
+    @Test
+    void mergesTopLevelAllOfInRequestBody() throws Exception {
+        // A body composed with allOf must have every subschema's properties and required
+        // fields merged into the one flat body; otherwise the tool exposes an empty schema.
+        HTTPRoute patchTask = FixtureSupport.route(routes, "patchTask");
+        JsonNode flatSchema = JSON.readTree(patchTask.getFlatParamSchema());
+
+        assertThat(flatSchema.path("properties").has("a")).isTrue();
+        assertThat(flatSchema.path("properties").has("b")).isTrue();
+        // the allOf wrapper itself must not leak into the flat schema
+        assertThat(flatSchema.path("properties").has("allOf")).isFalse();
+        assertThat(flatSchema.path("required")).anySatisfy(n -> assertThat(n.asText()).isEqualTo("b"));
+    }
+
+    @Test
+    void rewritesRefsNestedInsideComposedKeywordsAndContainers() throws Exception {
+        // #/components/schemas/... refs must be rewritten to #/$defs/... even when nested
+        // inside additionalProperties (maps), anyOf and items (arrays) — not just as a
+        // whole-body $ref (covered by rewritesBodyRefToDefsAndCarriesTransitiveDefinitions).
+        HTTPRoute searchTasks = FixtureSupport.route(routes, "searchTasks");
+        JsonNode flatSchema = JSON.readTree(searchTasks.getFlatParamSchema());
+        JsonNode props = flatSchema.path("properties");
+
+        assertThat(props.path("byPriority").path("additionalProperties").path("$ref").asText())
+                .isEqualTo("#/$defs/Priority");
+        assertThat(props.path("anyPriority").path("anyOf").get(0).path("$ref").asText())
+                .isEqualTo("#/$defs/Priority");
+        assertThat(props.path("priorities").path("items").path("$ref").asText())
+                .isEqualTo("#/$defs/Priority");
+        // the referenced definition travels alongside in $defs
+        assertThat(flatSchema.path("$defs").has("Priority")).isTrue();
     }
 }
