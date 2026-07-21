@@ -288,6 +288,20 @@
 
 	<build>
 		<plugins>
+			<!-- Override the parent's forced release arguments. release-parent's
+			     pluginManagement sets <arguments>${arguments} -Psonatype-oss-release</arguments>,
+			     which drags GPG signing + Maven Central publishing into release:prepare/perform.
+			     Maven Central is intentionally not published from the release build, so reset
+			     the arguments to just the caller-supplied ${arguments}; the release then only
+			     tags and deploys to artifacts.cibseven.org (no signing). -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-release-plugin</artifactId>
+				<configuration>
+					<arguments>${arguments}</arguments>
+				</configuration>
+			</plugin>
+
 			<!-- Fail the build when a dependency resolves to divergent versions
 			     across the transitive tree. -->
 			<plugin>
