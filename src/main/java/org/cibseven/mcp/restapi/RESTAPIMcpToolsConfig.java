@@ -18,15 +18,19 @@ package org.cibseven.mcp.restapi;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.cibseven.mcp.auth.EngineRestAuthProvider;
+import org.cibseven.mcp.restapi.access.RouteIndex;
+import org.cibseven.mcp.restapi.access.ToolAccessPolicy;
 import org.cibseven.mcp.restapi.models.HTTPRoute;
 import org.cibseven.mcp.restapi.openapi.OpenAPIParser;
 import org.cibseven.mcp.restapi.openapi.OpenApiProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -112,35 +116,60 @@ public class RESTAPIMcpToolsConfig {
     }
 
     /**
-     * Builds one stateless MCP tool specification per parsed OpenAPI operation.
+     * Indexes the parsed OpenAPI operations by {@code operationId} (the MCP tool name).
      *
-     * <p>Routes without an {@code operationId} are skipped because they do not have a
-     * stable tool name. Routes whose tool specification cannot be built are also
-     * skipped so that one malformed operation does not take down the remaining tool
-     * set.</p>
+     * <p>Routes without an {@code operationId} are dropped because they do not have a
+     * stable tool name. This is the single parse of the OpenAPI document, shared by
+     * {@link #getTools} and by the optional access-control filter.</p>
+     */
+    @Bean
+    public RouteIndex routeIndex(OpenAPIParser openApiParser) throws Exception {
+        Map<String, HTTPRoute> byOperationId = new LinkedHashMap<>();
+        int skipped = 0;
+
+        for (HTTPRoute route : openApiParser.parse()) {
+            if (route.getOperationId() == null || route.getOperationId().isEmpty()) {
+                logger.warn("Skipping route {} {} — missing operationId",
+                        route.getMethod(), route.getPath());
+                skipped++;
+                continue;
+            }
+            HTTPRoute previous = byOperationId.putIfAbsent(route.getOperationId(), route);
+            if (previous != null) {
+                logger.warn("Duplicate operationId '{}' ({} {}) — keeping the first occurrence",
+                        route.getOperationId(), route.getMethod(), route.getPath());
+            }
+        }
+
+        logger.info("Indexed {} OpenAPI operations ({} skipped for missing operationId)",
+                byOperationId.size(), skipped);
+        return new RouteIndex(byOperationId);
+    }
+
+    /**
+     * Builds one stateless MCP tool specification per indexed OpenAPI operation.
+     *
+     * <p>Routes whose tool specification cannot be built are skipped so that one malformed
+     * operation does not take down the remaining tool set.</p>
+     *
+     * <p>When a {@link ToolAccessPolicy} bean is present, each tool call is checked against
+     * it first and rejected before any engine round trip if the authenticated user may not
+     * invoke that operation. With no policy present the guard is a no-op and the server
+     * exposes and forwards every operation as before — keeping the library generic.</p>
      */
     @Bean
     public List<McpStatelessServerFeatures.SyncToolSpecification> getTools(
-            OpenAPIParser openApiParser,
-            RESTAPIRequestDirector restApiRequestDirector)
+            RouteIndex routeIndex,
+            RESTAPIRequestDirector restApiRequestDirector,
+            ObjectProvider<ToolAccessPolicy> toolAccessPolicyProvider)
             throws Exception {
 
         List<McpStatelessServerFeatures.SyncToolSpecification> tools =
                 new ArrayList<>();
 
-        List<HTTPRoute> routes = openApiParser.parse();
+        ToolAccessPolicy toolAccessPolicy = toolAccessPolicyProvider.getIfAvailable();
 
-        for (HTTPRoute route : routes) {
-            if (route.getOperationId() == null
-                    || route.getOperationId().isEmpty()) {
-
-                logger.warn(
-                        "Skipping route {} {} — missing operationId",
-                        route.getMethod(),
-                        route.getPath());
-
-                continue;
-            }
+        for (HTTPRoute route : routeIndex.routes()) {
 
             String flatSchema = route.getFlatParamSchema();
 
@@ -170,13 +199,30 @@ public class RESTAPIMcpToolsConfig {
                                 .tool(tool)
                                 .callHandler((context, request) -> {
                                     try {
-                                        Map<String, Object> requestParameters =
-                                                request.arguments();
-
                                         Authentication authentication =
                                                 SecurityContextHolder
                                                         .getContext()
                                                         .getAuthentication();
+
+                                        if (toolAccessPolicy != null
+                                                && !toolAccessPolicy.isAllowed(
+                                                        authentication, route)) {
+                                            logger.warn(
+                                                    "Rejecting call to '{}' — not authorized"
+                                                            + " for principal '{}'",
+                                                    route.getOperationId(),
+                                                    authentication != null
+                                                            ? authentication.getName() : null);
+                                            return McpSchema.CallToolResult.builder()
+                                                    .addTextContent(
+                                                            "Error: not authorized to call "
+                                                                    + route.getOperationId())
+                                                    .isError(Boolean.TRUE)
+                                                    .build();
+                                        }
+
+                                        Map<String, Object> requestParameters =
+                                                request.arguments();
 
                                         String response =
                                                 restApiRequestDirector.sendSyncRequest(
@@ -216,10 +262,7 @@ public class RESTAPIMcpToolsConfig {
             }
         }
 
-        logger.info(
-                "Registered {} stateless MCP tools from {} OpenAPI operations",
-                tools.size(),
-                routes.size());
+        logger.info("Registered {} stateless MCP tools", tools.size());
 
         return tools;
     }

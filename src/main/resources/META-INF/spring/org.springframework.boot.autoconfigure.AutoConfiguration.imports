@@ -1,2 +1,3 @@
 org.cibseven.mcp.restapi.RESTAPIMcpToolsConfig
+org.cibseven.mcp.restapi.access.ToolAccessControlAutoConfiguration
 org.cibseven.mcp.auth.SecurityImportCommonConfig
