@@ -29,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.core.Authentication;
@@ -112,17 +113,30 @@ public class RESTAPIMcpToolsConfig {
     }
 
     /**
+     * Builds the policy that derives MCP tool annotations from each operation.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public ToolAnnotationPolicy toolAnnotationPolicy() {
+        return new ToolAnnotationPolicy();
+    }
+
+    /**
      * Builds one stateless MCP tool specification per parsed OpenAPI operation.
      *
      * <p>Routes without an {@code operationId} are skipped because they do not have a
      * stable tool name. Routes whose tool specification cannot be built are also
      * skipped so that one malformed operation does not take down the remaining tool
      * set.</p>
+     *
+     * <p>Every tool carries {@link ToolAnnotationPolicy}-derived annotations so that MCP
+     * clients can group and bulk-approve read-only tools separately from writes.</p>
      */
     @Bean
     public List<McpStatelessServerFeatures.SyncToolSpecification> getTools(
             OpenAPIParser openApiParser,
-            RESTAPIRequestDirector restApiRequestDirector)
+            RESTAPIRequestDirector restApiRequestDirector,
+            ToolAnnotationPolicy toolAnnotationPolicy)
             throws Exception {
 
         List<McpStatelessServerFeatures.SyncToolSpecification> tools =
@@ -163,6 +177,8 @@ public class RESTAPIMcpToolsConfig {
                                         resolvedFlatSchema)
                                 .title(route.getSummary())
                                 .description(route.getDescription())
+                                .annotations(
+                                        toolAnnotationPolicy.annotationsFor(route))
                                 .build();
 
                 McpStatelessServerFeatures.SyncToolSpecification toolSpecification =
