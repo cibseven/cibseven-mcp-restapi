@@ -22,8 +22,10 @@ import java.util.List;
 import java.util.Map;
 
 import io.modelcontextprotocol.server.McpStatelessServerFeatures;
+import io.modelcontextprotocol.spec.McpSchema;
 
 import org.cibseven.mcp.auth.EngineRestAuthProvider;
+import org.cibseven.mcp.restapi.models.HTTPRoute;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -71,5 +73,68 @@ class RESTAPIMcpToolsConfigTest {
                                     "updateTask",
                                     "createDeployment");
                 });
+    }
+
+    @Test
+    void annotatesEveryToolSoClientsCanGroupThem() {
+        runner.withPropertyValues(
+                        "cibseven.mcp.restapi-mcp=true",
+                        "cibseven.openapi.url=" + FixtureSupport.fixturePath())
+                .run(context -> {
+                    @SuppressWarnings("unchecked")
+                    List<McpStatelessServerFeatures.SyncToolSpecification> tools =
+                            (List<McpStatelessServerFeatures.SyncToolSpecification>)
+                                    context.getBean("getTools");
+
+                    // an absent readOnlyHint is what makes a client lump everything into
+                    // one undifferentiated group, so no tool may leave it unset
+                    assertThat(tools)
+                            .allSatisfy(spec ->
+                                    assertThat(spec.tool().annotations().readOnlyHint())
+                                            .isNotNull());
+
+                    assertThat(readOnlyHintOf(tools, "getTask")).isTrue();
+                    assertThat(readOnlyHintOf(tools, "createTask")).isFalse();
+                });
+    }
+
+    @Test
+    void letsAnApplicationReplaceTheAnnotationPolicy() {
+        ToolAnnotationPolicy everythingIsReadOnly = new ToolAnnotationPolicy() {
+            @Override
+            public McpSchema.ToolAnnotations annotationsFor(HTTPRoute route) {
+                return McpSchema.ToolAnnotations.builder()
+                        .readOnlyHint(Boolean.TRUE)
+                        .build();
+            }
+        };
+
+        runner.withBean(ToolAnnotationPolicy.class, () -> everythingIsReadOnly)
+                .withPropertyValues(
+                        "cibseven.mcp.restapi-mcp=true",
+                        "cibseven.openapi.url=" + FixtureSupport.fixturePath())
+                .run(context -> {
+                    assertThat(context).hasSingleBean(ToolAnnotationPolicy.class);
+
+                    @SuppressWarnings("unchecked")
+                    List<McpStatelessServerFeatures.SyncToolSpecification> tools =
+                            (List<McpStatelessServerFeatures.SyncToolSpecification>)
+                                    context.getBean("getTools");
+
+                    assertThat(readOnlyHintOf(tools, "createTask")).isTrue();
+                });
+    }
+
+    private static Boolean readOnlyHintOf(
+            List<McpStatelessServerFeatures.SyncToolSpecification> tools,
+            String toolName) {
+
+        return tools.stream()
+                .filter(spec -> toolName.equals(spec.tool().name()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("No tool named " + toolName))
+                .tool()
+                .annotations()
+                .readOnlyHint();
     }
 }
