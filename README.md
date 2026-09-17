@@ -42,7 +42,7 @@ spring:
   ai:
     mcp:
       server:
-        protocol: STREAMABLE
+        protocol: STATELESS
         name: cibseven-mcp-server
         version: 1.0.0
         type: SYNC
