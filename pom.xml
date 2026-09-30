@@ -121,6 +121,11 @@
 					<groupId>org.antlr</groupId>
 					<artifactId>antlr4-runtime</artifactId>
 				</exclusion>
+				<!-- The servlet container is the host application's choice -->
+				<exclusion>
+					<groupId>org.springframework.boot</groupId>
+					<artifactId>spring-boot-starter-tomcat</artifactId>
+				</exclusion>
 			</exclusions>
 		</dependency>
 
