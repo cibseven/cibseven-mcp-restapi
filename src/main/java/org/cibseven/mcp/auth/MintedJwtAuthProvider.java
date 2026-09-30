@@ -48,7 +48,7 @@ public class MintedJwtAuthProvider implements EngineRestAuthProvider {
 
     @Override
     public Map<String, String> authHeaders(Authentication authentication) {
-        Jwt entra = EngineRestAuthProvider.inboundJwt(authentication);
+        Jwt entra = InboundJwt.from(authentication);
         if (entra == null) {
             logger.debug("No Entra JWT on Authentication (type={}); no engine-rest auth header set",
                 authentication == null ? "null" : authentication.getClass().getSimpleName());
