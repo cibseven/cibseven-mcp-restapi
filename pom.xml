@@ -50,7 +50,7 @@
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<version.java>17</version.java>
-		<spring-boot.version>4.0.7</spring-boot.version>
+		<spring-boot.version>4.0.8</spring-boot.version>
 		<spring-ai.version>2.0.0</spring-ai.version>
 		<!-- Jackson (2.x and 3.x) is managed by the Spring Boot BOM; do not pin it here. -->
 		<logback.version>1.5.38</logback.version>
