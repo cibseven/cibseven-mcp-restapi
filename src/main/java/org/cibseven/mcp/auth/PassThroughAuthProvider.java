@@ -43,7 +43,7 @@ public class PassThroughAuthProvider implements EngineRestAuthProvider {
 
     @Override
     public Map<String, String> authHeaders(Authentication authentication) {
-        Jwt jwt = EngineRestAuthProvider.inboundJwt(authentication);
+        Jwt jwt = InboundJwt.from(authentication);
         return jwt == null ? Map.of() : Map.of("Authorization", "Bearer " + jwt.getTokenValue());
     }
 }
