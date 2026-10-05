@@ -18,7 +18,7 @@ package org.cibseven.mcp.auth;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.CommandLineRunner;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingClass;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -34,7 +34,8 @@ public class SecurityImportCommonConfig {
     @Configuration
     @ConditionalOnClass(name = "org.springframework.security.config.annotation.SecurityConfigurerAdapter")
     @Import({
-        CommonMcpOAuth2Configuration.class,
+        CommonMcpOAuth2Configuration.class,   // issuer-uri set: MCP endpoint is an OAuth2 resource server
+        IssuerUriRequiredConfiguration.class, // issuer-uri unset: fail startup (misconfiguration)
         // engine-rest auth strategy beans: this library is registered via
         // AutoConfiguration.imports (not component-scanned by the host app), so the
         // @Component providers/resolvers/minter must be imported explicitly to exist
@@ -54,9 +55,28 @@ public class SecurityImportCommonConfig {
         // This class remains empty, it's used only as a holder for the above annotations
     }
 
-    @Bean
+    @Configuration
     @ConditionalOnMissingClass("org.springframework.security.config.annotation.SecurityConfigurerAdapter")
-    public CommandLineRunner securityNotAvailableWarning() {
-        return args -> logger.warn("Spring Security is not on the classpath. CommonMcpOAuth2Configuration will not be loaded.");
+    static class SecurityDisabledConfig {
+
+        /**
+         * Without Spring Security the MCP endpoint is unprotected and the caller's
+         * {@code Authorization} header is relayed as-is, so engine-rest alone validates it.
+         * Only {@code passthrough} is possible: {@code minted-jwt} needs a validated
+         * inbound identity, which only the OAuth2 resource server provides.
+         */
+        @Bean
+        EngineRestAuthProvider authorizationHeaderRelayProvider(
+                @Value("${cibseven.mcp.engine-rest.auth:passthrough}") String engineRestAuth) {
+            if (!"passthrough".equals(engineRestAuth)) {
+                throw new IllegalStateException(
+                    "cibseven.mcp.engine-rest.auth=" + engineRestAuth + " requires Spring Security "
+                  + "on the classpath and spring.security.oauth2.resourceserver.jwt.issuer-uri "
+                  + "to validate the caller. Without Spring Security only 'passthrough' is supported.");
+            }
+            logger.warn("Spring Security is not on the classpath: the MCP endpoint is not protected "
+                      + "and the caller's Authorization header is relayed unvalidated to engine-rest.");
+            return new AuthorizationHeaderRelayProvider();
+        }
     }
 }

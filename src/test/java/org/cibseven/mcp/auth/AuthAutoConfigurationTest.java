@@ -21,8 +21,10 @@ import static org.mockito.Mockito.mock;
 
 import java.util.Base64;
 
+import org.cibseven.mcp.restapi.FixtureSupport;
+import org.cibseven.mcp.restapi.RESTAPIMcpToolsConfig;
+import org.cibseven.mcp.restapi.RESTAPIRequestDirector;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -107,13 +109,41 @@ class AuthAutoConfigurationTest {
     }
 
     @Test
-    void warnsInsteadOfFailingWithoutSpringSecurityOnClasspath() {
+    void relaysAuthorizationHeaderWithoutSpringSecurityOnClasspath() {
         runner.withClassLoader(new FilteredClassLoader(SecurityConfigurerAdapter.class))
                 .run(context -> {
                     assertThat(context).hasNotFailed();
-                    assertThat(context).doesNotHaveBean(EngineRestAuthProvider.class);
-                    assertThat(context).hasBean("securityNotAvailableWarning");
-                    assertThat(context).hasSingleBean(CommandLineRunner.class);
+                    assertThat(context).hasSingleBean(EngineRestAuthProvider.class);
+                    assertThat(context.getBean(EngineRestAuthProvider.class))
+                            .isInstanceOf(AuthorizationHeaderRelayProvider.class);
+                    assertThat(context).doesNotHaveBean(CommonMcpOAuth2Configuration.class);
+                });
+    }
+
+    @Test
+    void mintedJwtFailsWithoutSpringSecurityOnClasspath() {
+        runner.withClassLoader(new FilteredClassLoader(SecurityConfigurerAdapter.class))
+                .withPropertyValues("cibseven.mcp.engine-rest.auth=minted-jwt")
+                .run(context -> assertThat(context).getFailure()
+                        .rootCause()
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("only 'passthrough' is supported"));
+    }
+
+    @Test
+    void toolsStartWithoutSpringSecurityOnClasspath() {
+        // the request director needs an EngineRestAuthProvider; without Spring Security
+        // the relay provider is the one that satisfies it
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(
+                        RESTAPIMcpToolsConfig.class, SecurityImportCommonConfig.class))
+                .withClassLoader(new FilteredClassLoader(SecurityConfigurerAdapter.class))
+                .withPropertyValues(
+                        "cibseven.mcp.restapi-mcp=true",
+                        "cibseven.openapi.url=" + FixtureSupport.fixturePath())
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(RESTAPIRequestDirector.class);
                 });
     }
 }

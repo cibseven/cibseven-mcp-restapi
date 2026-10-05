@@ -18,8 +18,6 @@ package org.cibseven.mcp.auth;
 
 import java.util.Map;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 /**
  * Strategy that decides how an MCP server authenticates its outgoing calls to a
@@ -40,6 +38,13 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
  *       the shared CIB seven JWT secret; translate the external identity into a
  *       freshly minted, short-lived CIB seven JWT.</li>
  * </ul>
+ *
+ * <p>Both require Spring Security (OAuth2 on the inbound hop). Without Spring Security
+ * on the classpath, {@link AuthorizationHeaderRelayProvider} relays the caller's
+ * {@code Authorization} header instead.</p>
+ *
+ * <p>Depends on {@code spring-security-core} only, so that it can be implemented
+ * without the OAuth2 classes on the classpath.</p>
  */
 public interface EngineRestAuthProvider {
 
@@ -51,21 +56,4 @@ public interface EngineRestAuthProvider {
      *         empty when no authentication can be derived
      */
     Map<String, String> authHeaders(Authentication authentication);
-
-    /**
-     * Extracts the validated inbound JWT from the MCP request principal, the single
-     * extraction rule shared by all provider implementations.
-     *
-     * @param authentication the inbound MCP request principal, may be {@code null}
-     * @return the inbound {@link Jwt}, or {@code null} when the principal carries none
-     */
-    static Jwt inboundJwt(Authentication authentication) {
-        if (authentication instanceof JwtAuthenticationToken jwtAuth) {
-            return jwtAuth.getToken();
-        }
-        if (authentication != null && authentication.getCredentials() instanceof Jwt jwt) {
-            return jwt;
-        }
-        return null;
-    }
 }
