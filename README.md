@@ -7,14 +7,19 @@ Its primary use is exposing the [CIB seven](https://cibseven.org) engine REST AP
 LLMs, but the mapping itself is generic — point `cibseven.openapi.url` at any OpenAPI
 document.
 
-The library also ships everything needed to run this securely:
+The library supports two security setups:
 
-- **Inbound**: OAuth2 resource-server protection of the MCP endpoint, including the
-  RFC 9728 discovery metadata MCP clients (e.g. the claude.ai connector) need.
-- **Outbound**: a pluggable authentication strategy towards the target engine-rest —
-  forward the caller's token (`passthrough`) or translate the caller's identity into a
-  short-lived CIB seven JWT (`minted-jwt`), so the engine's existing (LDAP)
-  authorizations apply per user.
+- **Engine REST security only**: the MCP endpoint itself is not protected. The caller's
+  `Authorization` header (e.g. a CIB seven JWT) is relayed to engine-rest, which
+  validates it with its own authentication provider.
+- **OAuth2-protected MCP endpoint**: the MCP endpoint is an OAuth2 resource server,
+  including the RFC 9728 discovery metadata MCP clients (e.g. the claude.ai connector)
+  need. The validated caller is then either forwarded to an OAuth2-protected engine-rest
+  (`passthrough`) or translated into a short-lived CIB seven JWT (`minted-jwt`), so the
+  engine's existing (LDAP) authorizations apply per user.
+
+Full documentation: [REST API MCP Plugin](https://docs.cibseven.org/) in the CIB seven
+user guide.
 
 > Looking for a ready-to-run server instead of a library? See
 > [cibseven-mcp-server](https://github.com/cibseven/cibseven-mcp-server) — a minimal
@@ -23,7 +28,7 @@ The library also ships everything needed to run this securely:
 ## Requirements
 
 - Java 17+
-- Spring Boot 4.0.x (Spring AI MCP server 2.0.0, MCP SDK 2.0.0)
+- Spring Boot 4.1.x (Spring AI MCP server 2.1.x, MCP SDK 2.0.0)
 
 ## Installation
 
@@ -31,7 +36,7 @@ The library also ships everything needed to run this securely:
 <dependency>
   <groupId>org.cibseven.mcp</groupId>
   <artifactId>cibseven-mcp-restapi</artifactId>
-  <version>1.0.0-SNAPSHOT</version>
+  <version>${mcp-restapi.version}</version>
 </dependency>
 ```
 
@@ -68,18 +73,84 @@ cibseven:
 | `cibseven.webclient.engineRest.path` | `/engine-rest` | Path appended to the base URL. |
 | `spring.ai.mcp.server.streamable-http.mcp-endpoint` | – | MCP endpoint path (e.g. `/mcp`). Required. |
 
-## Securing the MCP endpoint (inbound)
+## Security
 
-As soon as `spring.security.oauth2.resourceserver.jwt.issuer-uri` is configured (and
-Spring Security is on the classpath), the library turns the MCP endpoint into an
-**OAuth2 resource server**:
+A call crosses two hops, each authenticated separately:
+
+- **Inbound** (MCP client → MCP server): who is calling the MCP endpoint?
+- **Outbound** (MCP server → engine-rest): which CIB seven user does engine-rest run the
+  call as, so that the engine's identity provider (e.g. LDAP) resolves the right groups
+  and authorizations?
+
+Which setup is active depends on whether Spring Security is on the classpath of the host
+application:
+
+| Setup | Spring Security | Inbound | Outbound | MCP clients |
+| --- | --- | --- | --- | --- |
+| [Engine REST security only](#engine-rest-security-only) | Not on the classpath | Not protected | Caller's `Authorization` header relayed unchanged | Clients supporting custom headers, e.g. VS Code |
+| [OAuth2-protected MCP endpoint](#oauth2-protected-mcp-endpoint) | On the classpath, `issuer-uri` required | OAuth2 resource server | `passthrough` or `minted-jwt` | All, incl. the claude.ai connector |
+
+### Engine REST security only
+
+Without Spring Security on the classpath the MCP endpoint is **not protected**. The
+`Authorization` header of each incoming MCP request is relayed unchanged and unvalidated
+to engine-rest, whatever its scheme. engine-rest alone decides whether the credentials
+are valid and which user the call runs as.
+
+A typical combination is engine-rest with the Composite authentication provider, e.g.
+in a CIB seven Run distribution:
+
+```yaml
+camunda:
+  bpm:
+    run:
+      auth:
+        enabled: true
+        authentication: composite   # CIB seven JWT, with HTTP Basic as fallback
+```
+
+> **Unprotected engine-rest.** With the `pseudo` provider the `Authorization` header is
+> ignored and every call is accepted without authentication.
+
+> **Unprotected MCP endpoint.** Anyone who can reach the MCP endpoint can list the
+> tools, and every tool call is only as secure as engine-rest's own authentication. Only
+> expose the endpoint in trusted networks.
+
+Clients that let you set headers directly (VS Code, MCP Inspector) can send a static
+bearer token — with the `composite` provider a CIB seven JWT signed with the engine's
+`cibseven.webclient.authentication.jwtSecret`:
+
+```json
+"cibseven-mcp": {
+  "url": "http://localhost:8080/mcp",
+  "type": "http",
+  "headers": { "Authorization": "Bearer <CIB seven JWT>" }
+}
+```
+
+The claude.ai connector cannot do this (its UI only takes client id/secret) — use the
+OAuth2-protected setup below.
+
+Only `passthrough` (the default of `cibseven.mcp.engine-rest.auth`) is supported here;
+`minted-jwt` makes the application fail to start, because minting a token requires a
+validated caller identity.
+
+### OAuth2-protected MCP endpoint
+
+Add `spring-boot-starter-oauth2-resource-server` and configure
+`spring.security.oauth2.resourceserver.jwt.issuer-uri`. The library then turns the MCP
+endpoint into an **OAuth2 resource server**:
 
 - Incoming JWT bearer tokens are validated against the authorization server.
 - The standard discovery metadata is served unauthenticated:
   `/.well-known/oauth-authorization-server` and, per
   [RFC 9728](https://www.rfc-editor.org/rfc/rfc9728), the Protected Resource Metadata
   under `/.well-known/oauth-protected-resource{mcp-endpoint}`.
-- Each MCP session is bound to the user that created it.
+
+> **`issuer-uri` is required.** If Spring Security is on the classpath but `issuer-uri`
+> is not set, the application fails to start (this prevents Spring Boot's default HTTP
+> Basic login with a generated password). To leave the endpoint unprotected, remove
+> Spring Security from the classpath instead.
 
 ```yaml
 spring:
@@ -111,28 +182,11 @@ to request. Without it they send an `/authorize` request with no scope, which so
 authorization servers reject before login (Microsoft Entra ID:
 `AADSTS900144: The request body must contain the following parameter: 'scope'`).
 
-**Static bearer alternative:** for clients that let you set headers directly (VS Code,
-MCP Inspector), a servlet-filter/JWT setup also works:
+#### Outgoing engine-rest authentication
 
-```json
-"cibseven-mcp": {
-  "url": "http://localhost:8080/mcp",
-  "type": "http",
-  "headers": { "Authorization": "Bearer ..." }
-}
-```
-
-The claude.ai connector cannot do this (its UI only takes client id/secret) — only the
-OAuth2 chain works there.
-
-## Outgoing engine-rest authentication (outbound)
-
-The section above secures the **inbound** hop (MCP client → MCP server). Authentication
-of the **outbound** hop (MCP server → CIB seven engine-rest) is a separate concern: once
-the MCP server has validated the caller, it still has to tell engine-rest *who* the call
-is for, so that the engine's existing (LDAP) identity provider resolves the right groups
-and authorizations. This is handled by the pluggable `EngineRestAuthProvider` strategy
-(package `org.cibseven.mcp.auth`), selected per deployment:
+Once the MCP server has validated the caller, it still has to tell engine-rest *who* the
+call is for. This is handled by the pluggable `EngineRestAuthProvider` strategy (package
+`org.cibseven.mcp.auth`), selected per deployment:
 
 | Property | Default | Description |
 | --- | --- | --- |
@@ -148,15 +202,19 @@ and authorizations. This is handled by the pluggable `EngineRestAuthProvider` st
 The validated inbound bearer token is forwarded to engine-rest unchanged. Use this when
 **engine-rest is itself an OAuth2 resource server** against the same issuer.
 
-Deployment requirements for this mode (engine-rest side, *not* the MCP server's
-responsibility but required for it to be safe):
+Deployment requirements for this mode (engine-rest side):
 
-- **Validate the audience (`aud`)**, not only `iss` + signature. Without `aud`
-  validation engine-rest would accept *any* validly signed token from the tenant,
-  including tokens minted for unrelated applications.
+- **Activate OAuth2** in engine-rest; in a Spring Boot application add
+  `cibseven-bpm-spring-boot-starter-security`, which already brings Spring Security.
+- **Map the user id**: the engine takes the CIB seven user id from the claim configured
+  in `spring.security.oauth2.resourceserver.jwt.principal-claim-name`. It must match the
+  user id stored in the engine exactly; if no claim matches, use `minted-jwt`.
 - **Disable the read-only OAuth2 identity provider** so group/authorization resolution
   stays with the (LDAP) identity provider:
   `camunda.bpm.oauth2.identity-provider.enabled=false`.
+- **Validate the audience (`aud`)**, not only `iss` + signature (recommended). Without
+  `aud` validation engine-rest would accept *any* validly signed token from the tenant,
+  including tokens minted for unrelated applications.
 
 ### `minted-jwt`
 
@@ -181,6 +239,9 @@ cibseven:
       minted-jwt:
         resolver: graph        # or: claim | static
         ttl-seconds: 60
+  webclient:
+    authentication:
+      jwtSecret: ${CIBSEVEN_JWT_SECRET}
 ```
 
 The CIB seven userId is produced by a `UserIdResolver`:
@@ -192,8 +253,9 @@ The CIB seven userId is produced by a `UserIdResolver`:
   via Microsoft Graph (cached, 8 h). Use this when no Entra claim matches the stored
   userId 1:1 (the common LDAP-prod case). Requires a `graph` OAuth2 **client
   registration** (`client_credentials`, Application permission `User.Read.All`,
-  admin-consented); the required `OAuth2AuthorizedClientManager` is provided
-  automatically when `resolver=graph`:
+  admin-consented) and `spring-boot-starter-oauth2-client` on the classpath; the
+  required `OAuth2AuthorizedClientManager` is provided automatically when
+  `resolver=graph`:
 
   ```yaml
   spring:
@@ -237,7 +299,11 @@ Operations with `multipart/form-data` bodies (e.g. deployment creation) accept a
 (or `content`) argument for the file content and an optional `filename` argument that
 names the uploaded part — even though `filename` is not declared in the OpenAPI schema.
 Without it, the extension is guessed from the content (BPMN/DMN/CMMN namespaces) as a
-fallback. See [SKILL.md](SKILL.md) for the client-side guidance.
+fallback. For other content the part is named after the field without an extension,
+which downstream tools (Cockpit, Modeler) may not be able to open — MCP clients should
+always send a `filename` with the correct extension (e.g. `invoice.bpmn`). See
+[SKILL.md](SKILL.md) for the client-side guidance, which can be installed as a skill in
+MCP clients that support skills.
 
 ## Known limitations
 
