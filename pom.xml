@@ -278,6 +278,20 @@
 	</dependencies>
 
 	<build>
+		<pluginManagement>
+			<plugins>
+				<!-- Lets the Jenkins SonarQube stage's `mvn sonar:sonar` resolve the 'sonar'
+				     prefix. It used to resolve through the org.codehaus.mojo relocation stub,
+				     but Maven Central's org.codehaus.mojo group metadata no longer lists that
+				     prefix, so the project has to declare the plugin itself. -->
+				<plugin>
+					<groupId>org.sonarsource.scanner.maven</groupId>
+					<artifactId>sonar-maven-plugin</artifactId>
+					<version>5.8.0.7211</version>
+				</plugin>
+			</plugins>
+		</pluginManagement>
+
 		<plugins>
 			<!-- Override the parent's forced release arguments. release-parent's
 			     pluginManagement sets <arguments>${arguments} -Psonatype-oss-release</arguments>,
