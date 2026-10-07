@@ -127,6 +127,14 @@
 			<groupId>org.springaicommunity</groupId>
 			<artifactId>mcp-server-security</artifactId>
 			<version>${mcp-security.version}</version>
+			<exclusions>
+			    <!-- mcp-server-security's spring-core must be aligned to
+				the closest patch version of SF coming with SB's spring-boot.version -->
+				<exclusion>
+					<groupId>org.springframework</groupId>
+					<artifactId>spring-core</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 
 		<dependency>
