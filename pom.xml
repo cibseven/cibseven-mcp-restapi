@@ -206,7 +206,7 @@
 		<!-- OpenAPI parsing -->
 		<dependency>
 			<groupId>io.swagger.parser.v3</groupId>
-			<artifactId>swagger-parser</artifactId>
+			<artifactId>swagger-parser-v3</artifactId>
 			<version>2.1.42</version>
 			<exclusions>
 				<exclusion>
