@@ -54,6 +54,8 @@ spring:
         instructions: "CIB seven MCP server exposing the Engine REST API as MCP tools."
         streamable-http:
           mcp-endpoint: /mcp
+        annotation-scanner:
+          enabled: false
 
 cibseven:
   mcp:
