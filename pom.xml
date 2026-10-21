@@ -212,6 +212,14 @@
 			<artifactId>jjwt-jackson</artifactId>
 			<version>${jjwt.version}</version>
 			<scope>runtime</scope>
+			<exclusions>
+				<!-- jjwt-jackson requests an old jackson-databind version; the library declares
+				jackson-databind directly below, managed by the Spring Boot BOM -->
+				<exclusion>
+					<groupId>com.fasterxml.jackson.core</groupId>
+					<artifactId>jackson-databind</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 
 		<dependency>
