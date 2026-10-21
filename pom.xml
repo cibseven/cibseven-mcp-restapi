@@ -134,7 +134,20 @@
 					<groupId>org.springframework</groupId>
 					<artifactId>spring-core</artifactId>
 				</exclusion>
+				<!-- mcp-server-security pins spring-security-web 7.1.x (which in turn drags
+				Spring Framework 7.0.x). It is declared below instead, so that the host's 
+				Spring Boot BOM aligns it with the rest of Spring Security and Spring Framework. -->
+				<exclusion>
+					<groupId>org.springframework.security</groupId>
+					<artifactId>spring-security-web</artifactId>
+				</exclusion>
 			</exclusions>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-web</artifactId>
+			<scope>provided</scope>
 		</dependency>
 
 		<dependency>
@@ -149,6 +162,9 @@
 			<scope>provided</scope>
 		</dependency>
 
+		<!-- Intentionally compile scope: a host with plain Spring Security does not necessarily have
+     	 the resource-server module; without it CommonMcpOAuth2Configuration / InboundJwt would fail with
+     	 NoClassDefFoundError even though the ConditionalOnClass check is satisfied. -->
 		<dependency>
 			<groupId>org.springframework.security</groupId>
 			<artifactId>spring-security-oauth2-resource-server</artifactId>
