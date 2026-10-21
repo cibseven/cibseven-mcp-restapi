@@ -29,6 +29,7 @@ class IssuerUriRequiredConfigurationTest {
     void failsStartupWhenSpringSecurityIsPresentWithoutIssuerUri() {
         new WebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(SecurityImportCommonConfig.class))
+                .withPropertyValues("cibseven.mcp.restapi-mcp=true")
                 .run(context -> assertThat(context).getFailure()
                         .rootCause()
                         .isInstanceOf(IllegalStateException.class)

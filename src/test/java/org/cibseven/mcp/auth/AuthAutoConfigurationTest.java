@@ -41,7 +41,15 @@ class AuthAutoConfigurationTest {
     private static final String VALID_SECRET = Base64.getEncoder().encodeToString(new byte[64]);
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
-            .withConfiguration(AutoConfigurations.of(SecurityImportCommonConfig.class));
+            .withConfiguration(AutoConfigurations.of(SecurityImportCommonConfig.class))
+            .withPropertyValues("cibseven.mcp.restapi-mcp=true");
+
+    @Test
+    void inactiveUnlessRestapiMcpEnabled() {
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(SecurityImportCommonConfig.class))
+                .run(context -> assertThat(context).doesNotHaveBean(EngineRestAuthProvider.class));
+    }
 
     @Test
     void defaultsToPassThroughProvider() {

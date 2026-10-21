@@ -16,7 +16,7 @@
  */
 package org.cibseven.mcp.restapi.openapi;
 
-import io.swagger.parser.OpenAPIParser;
+import io.swagger.v3.parser.OpenAPIV3Parser;
 import io.swagger.v3.parser.core.models.ParseOptions;
 import io.swagger.v3.oas.models.OpenAPI;
 import org.slf4j.Logger;
@@ -45,7 +45,7 @@ public class OpenApiProvider {
     private OpenAPI parseSwaggerFile(String swaggerFile) throws IOException {
         ParseOptions options = new ParseOptions();
         options.setResolve(true);
-        return new OpenAPIParser().readLocation(swaggerFile, null, options).getOpenAPI();
+        return new OpenAPIV3Parser().readLocation(swaggerFile, null, options).getOpenAPI();
     }
 }
 

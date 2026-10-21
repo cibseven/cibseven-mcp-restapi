@@ -106,6 +106,11 @@
 					<groupId>org.springframework.boot</groupId>
 					<artifactId>spring-boot-starter-tomcat</artifactId>
 				</exclusion>
+				<!-- snakeyaml is declared once below, so that every path resolves to the same version -->
+				<exclusion>
+					<groupId>org.yaml</groupId>
+					<artifactId>snakeyaml</artifactId>
+				</exclusion>
 			</exclusions>
 		</dependency>
 
@@ -127,6 +132,27 @@
 			<groupId>org.springaicommunity</groupId>
 			<artifactId>mcp-server-security</artifactId>
 			<version>${mcp-security.version}</version>
+			<exclusions>
+			    <!-- mcp-server-security's spring-core must be aligned to
+				the closest patch version of SF coming with SB's spring-boot.version -->
+				<exclusion>
+					<groupId>org.springframework</groupId>
+					<artifactId>spring-core</artifactId>
+				</exclusion>
+				<!-- mcp-server-security pins spring-security-web 7.1.x (which in turn drags
+				Spring Framework 7.0.x). It is declared below instead, so that the host's 
+				Spring Boot BOM aligns it with the rest of Spring Security and Spring Framework. -->
+				<exclusion>
+					<groupId>org.springframework.security</groupId>
+					<artifactId>spring-security-web</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-web</artifactId>
+			<scope>provided</scope>
 		</dependency>
 
 		<dependency>
@@ -141,6 +167,9 @@
 			<scope>provided</scope>
 		</dependency>
 
+		<!-- Intentionally compile scope: a host with plain Spring Security does not necessarily have
+     	 the resource-server module; without it CommonMcpOAuth2Configuration / InboundJwt would fail with
+     	 NoClassDefFoundError even though the ConditionalOnClass check is satisfied. -->
 		<dependency>
 			<groupId>org.springframework.security</groupId>
 			<artifactId>spring-security-oauth2-resource-server</artifactId>
@@ -183,6 +212,14 @@
 			<artifactId>jjwt-jackson</artifactId>
 			<version>${jjwt.version}</version>
 			<scope>runtime</scope>
+			<exclusions>
+				<!-- jjwt-jackson requests an old jackson-databind version; the library declares
+				jackson-databind directly below, managed by the Spring Boot BOM -->
+				<exclusion>
+					<groupId>com.fasterxml.jackson.core</groupId>
+					<artifactId>jackson-databind</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 
 		<dependency>
@@ -198,9 +235,15 @@
 		<!-- OpenAPI parsing -->
 		<dependency>
 			<groupId>io.swagger.parser.v3</groupId>
-			<artifactId>swagger-parser</artifactId>
+			<artifactId>swagger-parser-v3</artifactId>
 			<version>2.1.42</version>
 			<exclusions>
+				<!-- swagger-parser-v3 requests snakeyaml 2.4 (2.5 via jackson-dataformat-yaml, 2.6 via
+				swagger-core); the single declaration below (managed by the Spring Boot BOM) replaces them -->
+				<exclusion>
+					<groupId>org.yaml</groupId>
+					<artifactId>snakeyaml</artifactId>
+				</exclusion>
 				<exclusion>
 					<groupId>com.google.guava</groupId>
 					<artifactId>guava</artifactId>
@@ -220,9 +263,22 @@
 			</exclusions>
 		</dependency>
 
+		<!-- YAML parsing for swagger-parser; version managed by the Spring Boot BOM -->
+		<dependency>
+			<groupId>org.yaml</groupId>
+			<artifactId>snakeyaml</artifactId>
+		</dependency>
+
 		<dependency>
 			<groupId>com.google.guava</groupId>
 			<artifactId>guava</artifactId>
+			<exclusions>
+				<!-- guava and caffeine request error_prone_annotations -->
+				<exclusion>
+					<groupId>com.google.errorprone</groupId>
+					<artifactId>error_prone_annotations</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 
 		<dependency>
