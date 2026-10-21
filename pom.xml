@@ -272,6 +272,13 @@
 		<dependency>
 			<groupId>com.google.guava</groupId>
 			<artifactId>guava</artifactId>
+			<exclusions>
+				<!-- guava and caffeine request error_prone_annotations -->
+				<exclusion>
+					<groupId>com.google.errorprone</groupId>
+					<artifactId>error_prone_annotations</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 
 		<dependency>
