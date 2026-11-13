@@ -100,13 +100,6 @@
 				<scope>import</scope>
 			</dependency>
 
-			<!-- spring-ai-model requests 2.2.38; same version as swagger-core-jakarta -->
-			<dependency>
-				<groupId>io.swagger.core.v3</groupId>
-				<artifactId>swagger-annotations-jakarta</artifactId>
-				<version>${version.swagger-core}</version>
-			</dependency>
-
 			<!-- caffeine wants 2.49.0 -->
 			<dependency>
 				<groupId>com.google.errorprone</groupId>
@@ -138,6 +131,12 @@
 				<exclusion>
 					<groupId>org.yaml</groupId>
 					<artifactId>snakeyaml</artifactId>
+				</exclusion>
+				<!-- spring-ai-model requests 2.2.38; swagger-core-jakarta below brings the version of
+				     swagger-core, so that every path (also in a host project) resolves to the same version -->
+				<exclusion>
+					<groupId>io.swagger.core.v3</groupId>
+					<artifactId>swagger-annotations-jakarta</artifactId>
 				</exclusion>
 			</exclusions>
 		</dependency>
