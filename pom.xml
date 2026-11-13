@@ -57,6 +57,10 @@
 		<!-- Jackson (2.x and 3.x) is managed by the Spring Boot BOM; do not pin it here. -->
 		<mcp-security.version>0.1.14</mcp-security.version>
 		<jjwt.version>0.12.6</jjwt.version>
+		<!-- swagger-core-jakarta (Jackson 2) used by swagger-parser. springdoc uses the same artifacts and
+		     packages (io.swagger.v3.*), so a host with springdoc should use the same version: the CIB seven
+		     webclient has springdoc 3.1.0, which uses 2.2.52. -->
+		<version.swagger-core>2.2.52</version.swagger-core>
 	</properties>
 
 	<dependencyManagement>
@@ -96,25 +100,20 @@
 				<scope>import</scope>
 			</dependency>
 
-			<!-- Pin transitive versions to resolve DependencyConvergence conflicts -->
+			<!-- spring-ai-model requests 2.2.38; same version as swagger-core-jakarta -->
 			<dependency>
-				<groupId>com.google.guava</groupId>
-				<artifactId>guava</artifactId>
-				<version>33.4.8-jre</version>
+				<groupId>io.swagger.core.v3</groupId>
+				<artifactId>swagger-annotations-jakarta</artifactId>
+				<version>${version.swagger-core}</version>
 			</dependency>
 
-			<!-- caffeine wants 2.49.0, guava wants 2.36.0; pin to the newer. -->
+			<!-- caffeine wants 2.49.0 -->
 			<dependency>
 				<groupId>com.google.errorprone</groupId>
 				<artifactId>error_prone_annotations</artifactId>
 				<version>2.49.0</version>
 			</dependency>
 
-			<dependency>
-				<groupId>com.google.code.findbugs</groupId>
-				<artifactId>jsr305</artifactId>
-				<version>3.0.2</version>
-			</dependency>
 		</dependencies>
 	</dependencyManagement>
 
@@ -238,17 +237,9 @@
 
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
-			<artifactId>jjwt-jackson</artifactId>
+			<artifactId>jjwt-gson</artifactId>
 			<version>${jjwt.version}</version>
 			<scope>runtime</scope>
-			<exclusions>
-				<!-- jjwt-jackson requests an old jackson-databind version; the library declares
-				jackson-databind directly below, managed by the Spring Boot BOM -->
-				<exclusion>
-					<groupId>com.fasterxml.jackson.core</groupId>
-					<artifactId>jackson-databind</artifactId>
-				</exclusion>
-			</exclusions>
 		</dependency>
 
 		<dependency>
@@ -261,7 +252,7 @@
 			<artifactId>caffeine</artifactId>
 		</dependency>
 
-		<!-- OpenAPI parsing -->
+		<!-- OpenAPI parsing. Its commons-io is needed at runtime to read a specification from a file. -->
 		<dependency>
 			<groupId>io.swagger.parser.v3</groupId>
 			<artifactId>swagger-parser-v3</artifactId>
@@ -273,13 +264,19 @@
 					<groupId>org.yaml</groupId>
 					<artifactId>snakeyaml</artifactId>
 				</exclusion>
+				<!-- swagger-parser-v3 requests the javax variants (javax.xml.bind). The jakarta variants
+				     below have the same packages and are the ones springdoc uses in a Jakarta host. -->
 				<exclusion>
-					<groupId>com.google.guava</groupId>
-					<artifactId>guava</artifactId>
+					<groupId>io.swagger.core.v3</groupId>
+					<artifactId>swagger-core</artifactId>
 				</exclusion>
 				<exclusion>
-					<groupId>commons-io</groupId>
-					<artifactId>commons-io</artifactId>
+					<groupId>io.swagger.core.v3</groupId>
+					<artifactId>swagger-models</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>io.swagger.core.v3</groupId>
+					<artifactId>swagger-annotations</artifactId>
 				</exclusion>
 				<exclusion>
 					<groupId>joda-time</groupId>
@@ -292,28 +289,21 @@
 			</exclusions>
 		</dependency>
 
+		<dependency>
+			<groupId>io.swagger.core.v3</groupId>
+			<artifactId>swagger-core-jakarta</artifactId>
+			<version>${version.swagger-core}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.swagger.core.v3</groupId>
+			<artifactId>swagger-models-jakarta</artifactId>
+			<version>${version.swagger-core}</version>
+		</dependency>
+
 		<!-- YAML parsing for swagger-parser; version managed by the Spring Boot BOM -->
 		<dependency>
 			<groupId>org.yaml</groupId>
 			<artifactId>snakeyaml</artifactId>
-		</dependency>
-
-		<dependency>
-			<groupId>com.google.guava</groupId>
-			<artifactId>guava</artifactId>
-			<exclusions>
-				<!-- guava and caffeine request error_prone_annotations -->
-				<exclusion>
-					<groupId>com.google.errorprone</groupId>
-					<artifactId>error_prone_annotations</artifactId>
-				</exclusion>
-			</exclusions>
-		</dependency>
-
-		<dependency>
-			<groupId>com.google.code.findbugs</groupId>
-			<artifactId>jsr305</artifactId>
-			<version>3.0.2</version>
 		</dependency>
 
 		<!-- Outbound HTTP -->
@@ -349,15 +339,19 @@
 			<scope>test</scope>
 		</dependency>
 
-		<!--
-			swagger-parser needs commons-io only when reading a specification
-			from a file location, which only the tests do.
-		-->
+		<!-- A released OpenAPI document (openapi.json of CIB seven 2.2.0) for ToolContractRegressionTest;
+		     only the document is needed, not its dependencies. -->
 		<dependency>
-			<groupId>commons-io</groupId>
-			<artifactId>commons-io</artifactId>
-			<version>2.22.0</version>
+			<groupId>org.cibseven.bpm</groupId>
+			<artifactId>cibseven-engine-rest-openapi</artifactId>
+			<version>2.2.0</version>
 			<scope>test</scope>
+			<exclusions>
+				<exclusion>
+					<groupId>*</groupId>
+					<artifactId>*</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 
 	</dependencies>
