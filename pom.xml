@@ -35,6 +35,8 @@
 
 	<developers>
 		<developer>
+			<name>CIB software GmbH</name>
+			<email>info@cib.de</email>
 			<organization>CIB software GmbH</organization>
 			<organizationUrl>https://www.cib.de</organizationUrl>
 		</developer>
